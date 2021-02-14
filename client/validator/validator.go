@@ -1,4 +1,4 @@
-package validation
+package validator
 
 import "regexp"
 
@@ -7,7 +7,7 @@ const (
 	listFiles  = `^\slist-files\s$`
 	register   = `^\s*register\s+[a-z]+(\s+(?:\"[^"]+\")\s*)+$`
 	unregister = `^\s*unregister\s+[a-z]+(\s+(?:\"[^"]+\")\s*)+$`
-	download   = `^\s*register\s+[a-z]+(\s+(?:\"[^"]+\")\s*){2}$`
+	download   = `^\s*download\s+[a-z]+(\s+(?:\"[^"]+\")\s*){2}$`
 )
 
 type Validator struct {
@@ -19,7 +19,7 @@ type Validator struct {
 	// downloadRegex   *regexp.Regexp
 }
 
-func createValidator() *Validator {
+func CreateValidator() *Validator {
 	regexes := make([]*regexp.Regexp, 0, 5)
 	regexes = append(regexes, regexp.MustCompile(disconnect))
 	regexes = append(regexes, regexp.MustCompile(listFiles))
@@ -38,7 +38,7 @@ func createValidator() *Validator {
 	// }
 }
 
-func (v *Validator) validate(command string) bool {
+func (v *Validator) Validate(command string) bool {
 	// disconnectRegex := regexp.MustCompile(`^\sdisconnect\s$`)
 	// listFilesRegex := regexp.MustCompile(`^\slist-files\s$`)
 	// registerRegex := regexp.MustCompile(`^\s*register\s+[a-z]+(\s+(?:\"[^"]+\")\s*)+$`)
