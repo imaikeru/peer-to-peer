@@ -183,9 +183,30 @@ func (t *TorrentServer) registerClient(address string) {
 	t.clients[address] = createEmptyClient()
 }
 
+func (t *TorrentServer) getUsernameFor(clientAddress string) string {
+	t.clientsMutex.Lock()
+	defer t.clientsMutex.Unlock()
+
+	return t.clients[clientAddress].username
+}
+
+func (t *TorrentServer) deleteFilesFor(username string) {
+	t.filesMutex.Lock()
+	defer t.filesMutex.Unlock()
+
+	delete(t.files, username)
+}
+
+func (t *TorrentServer) disconnect(clientAddress string) {
+	username := t.getUsernameFor(clientAddress)
+	t.deleteFilesFor(username)
+}
+
 func (t *TorrentServer) handleConnection(conn net.Conn) {
 	clientAddress := conn.RemoteAddr().String()
 	log.Println("Accepted connection from: ", clientAddress)
+
+	t.registerClient(clientAddress)
 
 	readerWriter := bufio.NewReadWriter(bufio.NewReaderSize(conn, 4096), bufio.NewWriterSize(conn, 4096))
 	defer conn.Close()
@@ -203,6 +224,7 @@ loop:
 
 			switch parsedCommand[commandIndex] {
 			case "disconnect":
+				t.disconnect(clientAddress)
 				break loop
 			case "unregister":
 				t.handleUnregisterFilesCommand(readerWriter, clientAddress, parsedCommand[userIndex], parsedCommand[filesStartIndex:]...)
