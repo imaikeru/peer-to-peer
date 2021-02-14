@@ -44,16 +44,20 @@ type TorrentServer struct {
 	// map[conn.remoteAddr().string()]Client{messagingConnection, miniServerAddress, username}
 	// map[username]map[fileName]
 
-	port         string
-	clients      map[string]*Client
-	clientsMutex sync.RWMutex
-	files        map[string]map[string]struct{}
-	filesMutex   sync.RWMutex
+	port               string
+	usedUsernames      map[string]*string
+	usedUsernamesMutex sync.RWMutex
+	clients            map[string]*Client
+	clientsMutex       sync.RWMutex
+	files              map[string]map[string]struct{}
+	filesMutex         sync.RWMutex
 }
 
 // function to list all users and their addresses - called when client asks for it
 func (t *TorrentServer) listUsersAndTheirAddresses() string {
 	var sb strings.Builder
+
+	sb.WriteString("list-users:")
 
 	t.clientsMutex.RLock()
 	defer t.clientsMutex.RUnlock()
@@ -81,6 +85,21 @@ func (t *TorrentServer) listFiles() string {
 	}
 
 	return sb.String()
+}
+
+func (t *TorrentServer) checkIfUsernameIsUsedByDifferentAddressAndAddItOtherwise(senderAddress, username string) bool {
+	t.usedUsernamesMutex.Lock()
+	defer t.usedUsernamesMutex.Unlock()
+
+	if user, ok := t.usedUsernames[username]; ok {
+		if *user == senderAddress {
+			return false
+		}
+		return true
+	}
+
+	t.usedUsernames[username] = &senderAddress
+	return false
 }
 
 func (t *TorrentServer) validateAndUpdateUsername(senderAddress, username string) (string, bool) {
@@ -133,12 +152,17 @@ func (t *TorrentServer) registerFiles(username string, files ...string) {
 	}
 
 	for _, fileToAdd := range files {
+		fileToAdd = strings.ReplaceAll(fileToAdd, `"`, "")
 		t.files[username][fileToAdd] = struct{}{}
 	}
 
 }
 
 func (t *TorrentServer) registerFilesCommandHelper(senderAddress, username string, files ...string) string {
+	if t.checkIfUsernameIsUsedByDifferentAddressAndAddItOtherwise(senderAddress, username) {
+		return fmt.Sprintf("Another user has already registered as %s.", username)
+	}
+
 	if registeredAs, valid := t.validateAndUpdateUsername(senderAddress, username); !valid {
 		return fmt.Sprintf("You have already registered as %s.", registeredAs)
 	}
@@ -172,9 +196,9 @@ func (t *TorrentServer) handleRegisterMiniServerCommand(rw *bufio.ReadWriter, cl
 	rw.WriteString("Successfully registered miniServerAddress." + "\n")
 }
 
-func (t *TorrentServer) handleWrongCommand(rw *bufio.ReadWriter) {
-	rw.WriteString("Wrong command. Choose between:;" + commandList + "\n")
-}
+// func (t *TorrentServer) handleWrongCommand(rw *bufio.ReadWriter) {
+// 	rw.WriteString("Wrong command. Choose between:;" + commandList + "\n")
+// }
 
 func (t *TorrentServer) registerClient(address string) {
 	t.clientsMutex.Lock()
@@ -236,8 +260,9 @@ loop:
 				t.handleListFilesCommand(readerWriter)
 			case "list-users":
 				t.handleListUsersCommand(readerWriter)
-			default:
-				t.handleWrongCommand(readerWriter)
+				// default:
+				// 	t.handleWrongCommand(readerWriter)
+				// }
 			}
 			readerWriter.Flush()
 		}
@@ -246,9 +271,10 @@ loop:
 
 func createNewServer(port string) *TorrentServer {
 	return &TorrentServer{
-		port:    port,
-		clients: make(map[string]*Client),
-		files:   make(map[string]map[string]struct{}),
+		port:          port,
+		usedUsernames: make(map[string]*string),
+		clients:       make(map[string]*Client),
+		files:         make(map[string]map[string]struct{}),
 	}
 }
 
