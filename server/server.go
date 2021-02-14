@@ -14,6 +14,11 @@ const (
 	host     = "localhost"
 	port     = "13337"
 
+	commandIndex           = 0
+	userIndex              = 1
+	miniServerAddressIndex = 1
+	filesStartIndex        = 2
+
 	commandList = "list-files;" +
 		"download user \"path to file on user\" \"path to save\";" +
 		"register user \"file1\" \"file2\" \"file3\" …. \"fileN\";" +
@@ -179,12 +184,13 @@ func (t *TorrentServer) registerClient(address string) {
 }
 
 func (t *TorrentServer) handleConnection(conn net.Conn) {
-	client := conn.RemoteAddr().String()
-	log.Println("Accepted connection from: ", client)
+	clientAddress := conn.RemoteAddr().String()
+	log.Println("Accepted connection from: ", clientAddress)
 
 	readerWriter := bufio.NewReadWriter(bufio.NewReaderSize(conn, 4096), bufio.NewWriterSize(conn, 4096))
 	defer conn.Close()
 
+loop:
 	for {
 		readerWriter.Flush()
 		if data, err := readerWriter.ReadString('\n'); err != nil {
@@ -192,18 +198,23 @@ func (t *TorrentServer) handleConnection(conn net.Conn) {
 			break
 		} else {
 			readerWriter.Flush()
-			fmt.Print("From client ", client, ": ", data)
-			if data == "disconnect" {
-				break
-			} else if strings.Contains(data, "list-files") {
-				//t.handleListFilesCommand(readerWriter)
-			} else if strings.Contains(data, "unregister") {
-				//t.handleUnregisterFilesCommand(readerWriter, data)
-			} else if strings.Contains(data, "register-miniserver") {
-				//t.handleRegisterMiniServerCommand(readerWriter, data)
-			} else if strings.Contains(data, "register") {
-				//t.handleRegisterFilesCommand(readerWriter, data)
-			} else {
+			fmt.Print("From client ", clientAddress, ": ", data)
+			parsedCommand := strings.Fields(data)
+
+			switch parsedCommand[commandIndex] {
+			case "disconnect":
+				break loop
+			case "unregister":
+				t.handleUnregisterFilesCommand(readerWriter, clientAddress, parsedCommand[userIndex], parsedCommand[filesStartIndex:]...)
+			case "register-miniserver":
+				t.handleRegisterMiniServerCommand(readerWriter, clientAddress, parsedCommand[miniServerAddressIndex])
+			case "register":
+				t.handleRegisterFilesCommand(readerWriter, clientAddress, parsedCommand[userIndex], parsedCommand[filesStartIndex:]...)
+			case "list-files":
+				t.handleListFilesCommand(readerWriter)
+			case "list-users":
+				t.handleListUsersCommand(readerWriter)
+			default:
 				t.handleWrongCommand(readerWriter)
 			}
 			readerWriter.Flush()
@@ -220,7 +231,7 @@ func createNewServer(port string) *TorrentServer {
 }
 
 func (t *TorrentServer) start() error {
-	listener, err := net.Listen("tcp", ":"+t.port)
+	listener, err := net.Listen(protocol, ":"+t.port)
 	if err != nil {
 		return fmt.Errorf("Error starting server on port %s. %w", port, err)
 	}
@@ -254,7 +265,7 @@ func main() {
 	// 		go handleConnection(conn)
 	// 	}
 	// }
-	ts := createNewServer("13337")
+	ts := createNewServer(port)
 
 	if err := ts.start(); err != nil {
 		log.Fatalln(err)
