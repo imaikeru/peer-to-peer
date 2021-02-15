@@ -1,8 +1,7 @@
-package main
+package client
 
 import (
 	"bufio"
-	// "flag"
 	"fmt"
 	"io"
 	"log"
@@ -168,7 +167,7 @@ func (c *Client) operateMiniServer(miniServer net.Listener) {
 }
 
 // Client is a struct that contains:
-// 	  - usersAndAddressesFileName - path to file which will contain the information about other users and their addresses that are connected to the main server
+//    - usersAndAddressesFileName - path to file which will contain the information about other users and their addresses that are connected to the main server
 //    - fileMutex                 - a Mutex that is used for working with "usersAndAddressesFileName"
 //    - centralServerport         - the port of the central server, to which the client connects
 //    - validator                 - used for validating the user commands
@@ -201,7 +200,15 @@ func (c *Client) parseListFiles(response string) *string {
 	return &data
 }
 
-func (c *Client) start() error {
+// Start is a function that:
+//   1. Connects the client to the central server and communicates back and forth with it.
+//   2. Creates a mini server, starts it and registers its address in the central server.
+//   3. Periodically pings the central server for user credentials.
+//   (***) Returns error if:
+//       - cannot connect to central server
+//       - cannot create miniserver
+//       - cannot read from server
+func (c *Client) Start() error {
 	server, err := net.Dial("tcp", ":13337")
 	if err != nil {
 		return fmt.Errorf("Failed to connect to server. %w", err)
@@ -279,18 +286,3 @@ func (c *Client) start() error {
 
 	}
 }
-
-// func main() {
-
-// 	filePathPtr := flag.String("file_path", "/path/to/file/where/users/and/their/addresses/are/saved", "string")
-
-// 	flag.Parse()
-
-// 	fmt.Print(*filePathPtr)
-
-// 	client := CreateNewClient(*filePathPtr, "13337")
-
-// 	if err := client.start(); err != nil {
-// 		log.Fatalln(err)
-// 	}
-// }
