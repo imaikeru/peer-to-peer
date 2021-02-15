@@ -25,7 +25,7 @@ const (
 		"unregister user \"file1\" \"file2\" \"file3\" …. \"fileN\";"
 )
 
-// client struct containing message connection, mini server address used for donwloading from, username
+// Client is a struct containing the mini server address and username of a client
 type Client struct {
 	// messagingConnection net.Conn
 	miniServerAddress string
@@ -39,11 +39,8 @@ func createEmptyClient() *Client {
 	}
 }
 
-// client struct containing listener, clients and files and the respective mutex for them
+// TorrentServer is a struct containing server port, map[username]*address and mutex for it, map[address]*{Client struct} and mutex for it, map[username]map[file] and mutex for it
 type TorrentServer struct {
-	// map[conn.remoteAddr().string()]Client{messagingConnection, miniServerAddress, username}
-	// map[username]map[fileName]
-
 	port               string
 	usedUsernames      map[string]*string
 	usedUsernamesMutex sync.RWMutex
@@ -53,7 +50,6 @@ type TorrentServer struct {
 	filesMutex         sync.RWMutex
 }
 
-// function to list all users and their addresses - called when client asks for it
 func (t *TorrentServer) listUsersAndTheirAddresses() string {
 	var sb strings.Builder
 
@@ -71,7 +67,6 @@ func (t *TorrentServer) listUsersAndTheirAddresses() string {
 	return sb.String()
 }
 
-// function to list all files and their respective owners - called when client asks for it
 func (t *TorrentServer) listFiles() string {
 	var sb strings.Builder
 
@@ -118,13 +113,13 @@ func (t *TorrentServer) validateAndUpdateUsername(senderAddress, username string
 	return client.username, true
 }
 
-// function to unregister files from a given user, meaning they wont be available for downloading afterwards ( wont be listed at least )
 func (t *TorrentServer) unregisterFiles(username string, files ...string) {
 	t.filesMutex.Lock()
 	defer t.filesMutex.Unlock()
 
 	for _, fileToDelete := range files {
-		delete(t.files[username], fileToDelete)
+		trimmedFileToDelete := strings.ReplaceAll(fileToDelete, `"`, "")
+		delete(t.files[username], trimmedFileToDelete)
 	}
 }
 
@@ -142,7 +137,6 @@ func (t *TorrentServer) handleUnregisterFilesCommand(rw *bufio.ReadWriter, sende
 	rw.WriteString(t.unregisterFilesCommandHelper(senderAddress, username, files...) + "\n")
 }
 
-// function that registers files for a given user, meaning they will be available for downloading afterwards
 func (t *TorrentServer) registerFiles(username string, files ...string) {
 	t.filesMutex.Lock()
 	defer t.filesMutex.Unlock()
@@ -184,7 +178,7 @@ func (t *TorrentServer) registerMiniServer(clientAddress, miniServerAddress stri
 }
 
 func (t *TorrentServer) handleListFilesCommand(rw *bufio.ReadWriter) {
-	rw.WriteString(t.listFiles() + "\n")
+	rw.WriteString("list-files:" + t.listFiles() + "\n")
 }
 
 func (t *TorrentServer) handleListUsersCommand(rw *bufio.ReadWriter) {
@@ -196,10 +190,6 @@ func (t *TorrentServer) handleRegisterMiniServerCommand(rw *bufio.ReadWriter, cl
 	rw.WriteString("Successfully registered miniServerAddress." + "\n")
 }
 
-// func (t *TorrentServer) handleWrongCommand(rw *bufio.ReadWriter) {
-// 	rw.WriteString("Wrong command. Choose between:;" + commandList + "\n")
-// }
-
 func (t *TorrentServer) registerClient(address string) {
 	t.clientsMutex.Lock()
 	defer t.clientsMutex.Unlock()
@@ -207,11 +197,16 @@ func (t *TorrentServer) registerClient(address string) {
 	t.clients[address] = createEmptyClient()
 }
 
-func (t *TorrentServer) getUsernameFor(clientAddress string) string {
+func (t *TorrentServer) getUsernameFor(clientAddress string) (string, error) {
 	t.clientsMutex.Lock()
 	defer t.clientsMutex.Unlock()
 
-	return t.clients[clientAddress].username
+	if client, ok := t.clients[clientAddress]; ok {
+		return client.username, nil
+	}
+
+	return "", fmt.Errorf("There is no such username")
+	// return t.clients[clientAddress].username
 }
 
 func (t *TorrentServer) deleteFilesFor(username string) {
@@ -222,8 +217,20 @@ func (t *TorrentServer) deleteFilesFor(username string) {
 }
 
 func (t *TorrentServer) disconnect(clientAddress string) {
-	username := t.getUsernameFor(clientAddress)
-	t.deleteFilesFor(username)
+	username, err := t.getUsernameFor(clientAddress)
+
+	if err == nil {
+		t.usedUsernamesMutex.Lock()
+		defer t.usedUsernamesMutex.Unlock()
+
+		delete(t.usedUsernames, username)
+
+		t.clientsMutex.Lock()
+		defer t.clientsMutex.Unlock()
+		delete(t.clients, clientAddress)
+
+		t.deleteFilesFor(username)
+	}
 }
 
 func (t *TorrentServer) handleConnection(conn net.Conn) {
@@ -240,6 +247,7 @@ loop:
 		readerWriter.Flush()
 		if data, err := readerWriter.ReadString('\n'); err != nil {
 			log.Println(err)
+			t.disconnect(clientAddress)
 			break
 		} else {
 			readerWriter.Flush()
@@ -260,9 +268,6 @@ loop:
 				t.handleListFilesCommand(readerWriter)
 			case "list-users":
 				t.handleListUsersCommand(readerWriter)
-				// default:
-				// 	t.handleWrongCommand(readerWriter)
-				// }
 			}
 			readerWriter.Flush()
 		}
@@ -297,26 +302,9 @@ func (t *TorrentServer) start() error {
 }
 
 func main() {
-	// listener, err := net.Listen(protocol, host+":"+port)
-
-	// if err != nil {
-	// 	fmt.Println(err)
-	// 	return
-	// }
-	// defer listener.Close()
-
-	// log.Println("Server Started")
-	// for {
-	// 	if conn, err := listener.Accept(); err != nil {
-	// 		log.Println("Error accepting connection")
-	// 	} else {
-	// 		go handleConnection(conn)
-	// 	}
-	// }
 	ts := createNewServer(port)
 
 	if err := ts.start(); err != nil {
 		log.Fatalln(err)
 	}
-
 }
