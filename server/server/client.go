@@ -1,4 +1,4 @@
-package internal
+package server
 
 // Client is a struct that contains:
 //     - username          - string

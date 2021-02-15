@@ -1,4 +1,4 @@
-package internal
+package server
 
 import (
 	"bufio"
@@ -21,11 +21,11 @@ const (
 // TorrentServer is a struct that contains:
 //     - port                - the port on which the server listens
 //     - usedUsernames       - a map whose keys are usernames(strings) that are already being used and values are the addresses of the clients that ue them(*strings)
-//     - usedUsernamesMutex  - a Mutex that is used for working with "usedUsernames"
-//     - clients             - a map whose keys are user addresses(string) and values are
-//     - clientsMutex        -
-//     - files               -
-//     - filesMutex          -
+//     - usedUsernamesMutex  - a Mutex that is used for working safely with "usedUsernames"
+//     - clients             - a map whose keys are user addresses(string) and values are pointers to Client struct
+//     - clientsMutex        - a Mutex that is used for working safely with "clients"
+//     - files               - a map whose keys are usernames(strings) and values are file paths(strings)
+//     - filesMutex          - a Mutex that is used for working safely with "files"
 type TorrentServer struct {
 	port               string
 	usedUsernames      map[string]*string
@@ -274,8 +274,9 @@ func CreateNewServer(port string) *TorrentServer {
 }
 
 // Start is a function that:
-//    1. Creates a listener using the port from TorrentSerevr
+//    1. Creates a listener using the port from TorrentServer
 //    2. Accepts and handles connections
+//    (***) Returns error if listener cannot be initialized on the port specified by TorrentServer
 func (t *TorrentServer) Start() error {
 	listener, err := net.Listen(protocol, ":"+t.port)
 	if err != nil {
