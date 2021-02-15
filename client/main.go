@@ -4,6 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"log"
+
+	"github.com/imaikeru/peer-to-peer/client/internal"
 )
 
 func main() {
@@ -14,9 +16,9 @@ func main() {
 
 	fmt.Print(*filePathPtr)
 
-	client := InitializeClient(*filePathPtr, "13337")
+	client := internal.CreateNewClient(*filePathPtr, "13337")
 
-	if err := client.start(); err != nil {
+	if err := client.Start(); err != nil {
 		log.Fatalln(err)
 	}
 }

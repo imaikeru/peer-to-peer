@@ -10,15 +10,14 @@ const (
 	download   = `^\s*download\s+[a-z]+(\s+(?:\"[^"]+\")\s*){2}$`
 )
 
+// Validator is a struct that contains:
+//    - regexes - a slice of regular expressions, used for validating user input
 type Validator struct {
 	regexes []*regexp.Regexp
-	// disconnectRegex *regexp.Regexp
-	// listFilesRegex  *regexp.Regexp
-	// registerRegex   *regexp.Regexp
-	// unregisterRegex *regexp.Regexp
-	// downloadRegex   *regexp.Regexp
 }
 
+// CreateValidator is a factory method that:
+//    - creates and returns a pointer to Validator struct with predefined regexes
 func CreateValidator() *Validator {
 	regexes := make([]*regexp.Regexp, 0, 5)
 	regexes = append(regexes, regexp.MustCompile(disconnect))
@@ -29,22 +28,15 @@ func CreateValidator() *Validator {
 	return &Validator{
 		regexes: regexes,
 	}
-	// return &Validator{
-	// 	disconnectRegex: regexp.MustCompile(`^\sdisconnect\s$`),
-	// 	listFilesRegex:  regexp.MustCompile(`^\slist-files\s$`),
-	// 	registerRegex:   regexp.MustCompile(`^\s*register\s+[a-z]+(\s+(?:\"[^"]+\")\s*)+$`),
-	// 	unregisterRegex: regexp.MustCompile(`^\s*unregister\s+[a-z]+(\s+(?:\"[^"]+\")\s*)+$`),
-	// 	downloadRegex:   regexp.MustCompile(`^\s*register\s+[a-z]+(\s+(?:\"[^"]+\")\s*){2}$`),
-	// }
 }
 
+// Validate is a function that:
+//    - accepts:
+//        - command - user input(string)
+//    - returns:
+//        - true - if the command is valid
+//        - false - otherwise
 func (v *Validator) Validate(command string) bool {
-	// disconnectRegex := regexp.MustCompile(`^\sdisconnect\s$`)
-	// listFilesRegex := regexp.MustCompile(`^\slist-files\s$`)
-	// registerRegex := regexp.MustCompile(`^\s*register\s+[a-z]+(\s+(?:\"[^"]+\")\s*)+$`)
-	// unregisterRegex := regexp.MustCompile(`^\s*unregister\s+[a-z]+(\s+(?:\"[^"]+\")\s*)+$`)
-	// downloadRegex := regexp.MustCompile(`^\s*register\s+[a-z]+(\s+(?:\"[^"]+\")\s*){2}$`)
-
 	for _, regex := range v.regexes {
 		if regex.MatchString(command) {
 			return true

@@ -1,7 +1,8 @@
-package internalClient
+package main
 
 import (
 	"bufio"
+	// "flag"
 	"fmt"
 	"io"
 	"log"
@@ -178,13 +179,13 @@ type Client struct {
 	validator                 *validator.Validator
 }
 
-// InitializeClient is a factory function that:
+// CreateNewClient is a factory function that:
 //   - accepts:
 //        - usersAndAddressesFileName - path to file which will contain the information about other users and their addresses that are connected to the main server
 //        - centralServerPort         - the port of the central server, to which the client will connect
 //   - creates and returns:
 //        - a pointer to Client struct
-func InitializeClient(usersAndAddressesFileName, centralServerPort string) *Client {
+func CreateNewClient(usersAndAddressesFileName, centralServerPort string) *Client {
 	return &Client{
 		usersAndAddressesFileName: usersAndAddressesFileName,
 		centralServerPort:         centralServerPort,
@@ -287,7 +288,7 @@ func (c *Client) start() error {
 
 // 	fmt.Print(*filePathPtr)
 
-// 	client := initializeClient(*filePathPtr, "13337")
+// 	client := CreateNewClient(*filePathPtr, "13337")
 
 // 	if err := client.start(); err != nil {
 // 		log.Fatalln(err)
