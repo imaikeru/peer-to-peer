@@ -1,8 +1,7 @@
-package main
+package internalClient
 
 import (
 	"bufio"
-	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -26,7 +25,6 @@ const (
 		"unregister user \"file1\" \"file2\" \"file3\" …. \"fileN\"\n"
 )
 
-// read file to see what address you need to download from
 func (c *Client) getAddressToDownloadFrom(username string) (string, error) {
 	c.fileMutex.Lock()
 	defer c.fileMutex.Unlock()
@@ -51,7 +49,6 @@ func (c *Client) getAddressToDownloadFrom(username string) (string, error) {
 	return "", fmt.Errorf("There is no record containing this username and its address")
 }
 
-// download file
 func (c *Client) miniServerHandleDownloadRequest(conn net.Conn) {
 	log.Println("Accepted download request from: ", conn.RemoteAddr().String())
 
@@ -159,7 +156,6 @@ func (c *Client) updateUsersAndAddresses(newData string) {
 	}
 }
 
-// start mini server that listens to download requests
 func (c *Client) operateMiniServer(miniServer net.Listener) {
 	for {
 		if conn, err := miniServer.Accept(); err != nil {
@@ -170,6 +166,11 @@ func (c *Client) operateMiniServer(miniServer net.Listener) {
 	}
 }
 
+// Client is a struct that contains:
+// 	  - usersAndAddressesFileName - path to file which will contain the information about other users and their addresses that are connected to the main server
+//    - fileMutex                 - a Mutex that is used for working with "usersAndAddressesFileName"
+//    - centralServerport         - the port of the central server, to which the client connects
+//    - validator                 - used for validating the user commands
 type Client struct {
 	fileMutex                 sync.Mutex
 	usersAndAddressesFileName string
@@ -177,7 +178,13 @@ type Client struct {
 	validator                 *validator.Validator
 }
 
-func initializeClient(usersAndAddressesFileName, centralServerPort string) *Client {
+// InitializeClient is a factory function that:
+//   - accepts:
+//        - usersAndAddressesFileName - path to file which will contain the information about other users and their addresses that are connected to the main server
+//        - centralServerPort         - the port of the central server, to which the client will connect
+//   - creates and returns:
+//        - a pointer to Client struct
+func InitializeClient(usersAndAddressesFileName, centralServerPort string) *Client {
 	return &Client{
 		usersAndAddressesFileName: usersAndAddressesFileName,
 		centralServerPort:         centralServerPort,
@@ -272,57 +279,17 @@ func (c *Client) start() error {
 	}
 }
 
-func main() {
+// func main() {
 
-	filePathPtr := flag.String("file_path", "/path/to/file/where/users/and/their/addresses/are/saved", "string")
+// 	filePathPtr := flag.String("file_path", "/path/to/file/where/users/and/their/addresses/are/saved", "string")
 
-	flag.Parse()
+// 	flag.Parse()
 
-	fmt.Print(*filePathPtr)
+// 	fmt.Print(*filePathPtr)
 
-	client := initializeClient(*filePathPtr, "13337")
+// 	client := initializeClient(*filePathPtr, "13337")
 
-	if err := client.start(); err != nil {
-		log.Fatalln(err)
-	}
-	// if conn, err := net.Dial("tcp", ":13337"); err != nil {
-	// 	log.Println("Failed to connect to server, exitting.")
-	// } else {
-	// 	consoleToServerRw := bufio.NewReadWriter(bufio.NewReaderSize(os.Stdin, 4096), bufio.NewWriterSize(conn, 4096))
-
-	// 	if miniServer, errServerCreated := net.Listen("tcp", "localhost:0"); errServerCreated != nil {
-	// 		log.Println("Could not initialize MiniServer. Exitting.")
-	// 	} else {
-	// 		miniServerAddress := miniServer.Addr().String()
-	// 		log.Printf("MiniServer started. Listening on: %s", miniServerAddress)
-	// 		consoleToServerRw.Flush()
-	// 		consoleToServerRw.WriteString("register-miniserver " + miniServerAddress)
-	// 		consoleToServerRw.Flush()
-	// 		go func() {
-	// 			for {
-	// 				if request, err := consoleToServerRw.ReadString('\n'); err != nil {
-	// 					log.Println("Failed to read from stdin.")
-	// 					break
-	// 				} else {
-	// 					if written, err2 := consoleToServerRw.WriteString(request); err2 != nil {
-	// 						log.Println(err2)
-	// 					} else {
-	// 						log.Println(written)
-	// 					}
-	// 				}
-	// 				consoleToServerRw.Flush()
-	// 			}
-	// 		}()
-
-	// 		serverReader := bufio.NewReader(conn)
-	// 		for {
-	// 			if response, err := serverReader.ReadString('\n'); err != nil {
-	// 				log.Println("Failed to read from server.")
-	// 				break
-	// 			} else {
-	// 				fmt.Println("From server: ", response)
-	// 			}
-	// 		}
-	// 	}
-	// }
-}
+// 	if err := client.start(); err != nil {
+// 		log.Fatalln(err)
+// 	}
+// }
