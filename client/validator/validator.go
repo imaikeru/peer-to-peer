@@ -3,8 +3,8 @@ package validator
 import "regexp"
 
 const (
-	disconnect = `^\sdisconnect\s$`
-	listFiles  = `^\slist-files\s$`
+	disconnect = `^\s*disconnect\s*$`
+	listFiles  = `^\s*list-files\s*$`
 	register   = `^\s*register\s+[a-z]+(\s+(?:\"[^"]+\")\s*)+$`
 	unregister = `^\s*unregister\s+[a-z]+(\s+(?:\"[^"]+\")\s*)+$`
 	download   = `^\s*download\s+[a-z]+(\s+(?:\"[^"]+\")\s*){2}$`

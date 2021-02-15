@@ -19,13 +19,18 @@ const (
 	userIndex             = 1
 	pathToFileOnUserIndex = 2
 	pathToSaveIndex       = 3
+
+	commandsList = "Wrong command, choose between:\n" + "list-files\n" +
+		"download user \"path to file on user\" \"path to save\"\n" +
+		"register user \"file1\" \"file2\" \"file3\" …. \"fileN\"\n" +
+		"unregister user \"file1\" \"file2\" \"file3\" …. \"fileN\"\n"
 )
 
 // read file to see what address you need to download from
 func (c *Client) getAddressToDownloadFrom(username string) (string, error) {
 	c.fileMutex.Lock()
 	defer c.fileMutex.Unlock()
-	file, err := os.Open(c.usersAndAddressesFileName)
+	file, err := os.OpenFile(c.usersAndAddressesFileName, os.O_RDWR, 0777)
 	if err != nil {
 		log.Println("Error while opening file for reading.")
 		return "", err
@@ -40,6 +45,8 @@ func (c *Client) getAddressToDownloadFrom(username string) (string, error) {
 			return address, nil
 		}
 	}
+
+	file.Close()
 
 	return "", fmt.Errorf("There is no record containing this username and its address")
 }
@@ -68,21 +75,26 @@ func (c *Client) miniServerHandleDownloadRequest(conn net.Conn) {
 					break
 				} else {
 					rw.Write(buf[0:bytesRead])
+					rw.Flush()
 				}
 			}
-
+			fileToSend.Close()
 		}
 	}
 }
 
 func (c *Client) downloadFile(address *string, pathToFileOnUser, pathToSave string) {
-	downloadConnection, connectToMiniserverErr := net.Dial("tcp", *address)
+	fmt.Println("Address is " + *address)
+	split := strings.SplitN(*address, ":", 2)
+	downloadConnection, connectToMiniserverErr := net.Dial("tcp", split[0]+":"+split[1])
 	if connectToMiniserverErr != nil {
 		log.Printf("Failed to connect to miniserver with address: %s", *address)
+		log.Printf(connectToMiniserverErr.Error())
 	} else {
 
 		requestWriter := bufio.NewWriter(downloadConnection)
 		requestWriter.WriteString(pathToFileOnUser + "\n")
+		requestWriter.Flush()
 
 		newFile, createFileError := os.Create(pathToSave)
 		if createFileError != nil {
@@ -99,11 +111,13 @@ func (c *Client) downloadFile(address *string, pathToFileOnUser, pathToSave stri
 						break
 					} else {
 						fileReadWriter.Write(buf[0:bytesRead])
+						fileReadWriter.Flush()
 					}
 				}
 
 			}
 		}
+		newFile.Close()
 	}
 }
 
@@ -111,8 +125,13 @@ func (c *Client) getUsersInformationFromServerPeriodically(conn net.Conn) {
 	serverWriter := bufio.NewWriter(conn)
 
 	for {
-		serverWriter.WriteString("list-users" + "\n")
+		serverWriter.Flush()
+		_, err := serverWriter.WriteString("list-users" + "\n")
+		serverWriter.Flush()
 
+		if err != nil {
+			log.Printf("Error occurred while trying to write to server, %s", err.Error())
+		}
 		time.Sleep(30 * time.Second)
 	}
 }
@@ -132,7 +151,11 @@ func (c *Client) updateUsersAndAddresses(newData string) {
 		log.Printf("Error when attempting to open %s to update users data.", c.usersAndAddressesFileName)
 	} else {
 		writer := bufio.NewWriter(file)
-		writer.WriteString(newInfo)
+		if _, writingError := writer.WriteString(newInfo); writingError != nil {
+			log.Printf("%s", writingError.Error())
+		}
+		writer.Flush()
+		file.Close()
 	}
 }
 
@@ -147,7 +170,6 @@ func (c *Client) operateMiniServer(miniServer net.Listener) {
 	}
 }
 
-//^\s*register\s+[a-z]+(\s+(?:\"[^"]+\")\s*){2}$
 type Client struct {
 	fileMutex                 sync.Mutex
 	usersAndAddressesFileName string
@@ -163,6 +185,14 @@ func initializeClient(usersAndAddressesFileName, centralServerPort string) *Clie
 	}
 }
 
+func (c *Client) parseListFiles(response string) *string {
+	splitResponse := strings.SplitN(response, ":", 2)
+	data := splitResponse[1]
+	data = strings.Trim(data, ";")
+	data = strings.ReplaceAll(data, ";", "\n")
+	return &data
+}
+
 func (c *Client) start() error {
 	server, err := net.Dial("tcp", ":13337")
 	if err != nil {
@@ -170,11 +200,14 @@ func (c *Client) start() error {
 	}
 	consoleToServerRw := bufio.NewReadWriter(bufio.NewReaderSize(os.Stdin, 4096), bufio.NewWriterSize(server, 4096))
 
+	fmt.Println("Server address " + server.RemoteAddr().String())
+
 	miniServer, errServerCreated := net.Listen("tcp", "localhost:0")
 	if errServerCreated != nil {
 		return fmt.Errorf("Could not initialize MiniServer. %w", errServerCreated)
 	}
 
+	fmt.Println(miniServer.Addr().String())
 	go c.operateMiniServer(miniServer)
 
 	miniServerAddress := miniServer.Addr().String()
@@ -182,6 +215,9 @@ func (c *Client) start() error {
 	consoleToServerRw.Flush()
 	consoleToServerRw.WriteString("register-miniserver " + miniServerAddress + "\n")
 	consoleToServerRw.Flush()
+
+	go c.getUsersInformationFromServerPeriodically(server)
+
 	go func() {
 		for {
 			consoleToServerRw.Flush()
@@ -189,11 +225,8 @@ func (c *Client) start() error {
 				log.Println("Failed to read from stdin.")
 				break
 			} else {
-				if !c.validator.Validate(request) {
-					fmt.Printf("Wrong command, choose between:\n" + "list-files\n" +
-						"download user \"path to file on user\" \"path to save\"\n" +
-						"register user \"file1\" \"file2\" \"file3\" …. \"fileN\"\n" +
-						"unregister user \"file1\" \"file2\" \"file3\" …. \"fileN\"\n")
+				if !c.validator.Validate(strings.ReplaceAll(request, "\n", "")) {
+					log.Printf(commandsList)
 				} else {
 					if strings.Contains(request, "download") {
 						splitRequest := strings.Fields(request)
@@ -202,45 +235,14 @@ func (c *Client) start() error {
 						pathToSave := splitRequest[pathToSaveIndex]
 						addressToDownloadFrom, userErr := c.getAddressToDownloadFrom(username)
 						if userErr != nil {
-							log.Printf("The user %s is not an active one.", username)
+							log.Printf("The user %s is not an active one. %s", username, userErr.Error())
 						} else {
 							go c.downloadFile(&addressToDownloadFrom, pathToFileOnUser, pathToSave)
-							// go func(address *string, pathToFileOnUser, pathToSave string) {
-							// 	downloadConnection, connectToMiniserverErr := net.Dial("tcp", *address)
-							// 	if connectToMiniserverErr != nil {
-							// 		log.Printf("Failed to connect to miniserver with address: %s", *address)
-							// 	} else {
-
-							// 		newFile, createFileError := os.Create(pathToSave)
-							// 		if createFileError != nil {
-							// 			log.Printf("Could not create file with name %s", pathToSave)
-							// 		} else {
-							// 			fileReadWriter := bufio.NewReadWriter(bufio.NewReader(downloadConnection), bufio.NewWriter(newFile))
-							// 			for {
-							// 				buf := make([]byte, 4096)
-							// 				for {
-							// 					if bytesRead, readingErr := fileReadWriter.Read(buf); readingErr != nil {
-							// 						if readingErr != io.EOF {
-							// 							log.Printf("Error reading file %s.", pathToFileOnUser)
-							// 						}
-							// 						break
-							// 					} else {
-							// 						fileReadWriter.Write(buf[0:bytesRead])
-							// 					}
-							// 				}
-
-							// 			}
-							// 		}
-							// 	}
-							// }(&addressToDownloadFrom, pathToFileOnUser, pathToSave)
 						}
 					} else {
-
 						consoleToServerRw.Flush()
-						if written, err2 := consoleToServerRw.WriteString(request); err2 != nil {
+						if _, err2 := consoleToServerRw.WriteString(request); err2 != nil {
 							log.Println(err2)
-						} else {
-							log.Println(written)
 						}
 						consoleToServerRw.Flush()
 					}
@@ -249,19 +251,24 @@ func (c *Client) start() error {
 		}
 	}()
 
-	go c.getUsersInformationFromServerPeriodically(server)
-
 	serverReader := bufio.NewReader(server)
 	for {
-		if response, err := serverReader.ReadString('\n'); err != nil {
-			return fmt.Errorf("Failed to read from server. %w", err)
-		} else {
-			if strings.Contains(response, "list-users:") {
-				go c.updateUsersAndAddresses(response)
-			} else {
-				fmt.Println("From server: ", response)
+		response, err := serverReader.ReadString('\n')
+		if err != nil {
+			if err != io.EOF {
+				return fmt.Errorf("Failed to read from server. %w", err)
 			}
+			log.Println("Disconnected from server.")
+			return nil
 		}
+		if strings.Contains(response, "list-users:") {
+			go c.updateUsersAndAddresses(response)
+		} else if strings.Contains(response, "list-files:") {
+			log.Printf("\n" + *c.parseListFiles(response))
+		} else {
+			log.Printf("From server: %s", response)
+		}
+
 	}
 }
 
