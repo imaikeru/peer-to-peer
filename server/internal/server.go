@@ -1,4 +1,4 @@
-package main
+package internal
 
 import (
 	"bufio"
@@ -11,35 +11,21 @@ import (
 
 const (
 	protocol = "tcp"
-	host     = "localhost"
-	port     = "13337"
 
 	commandIndex           = 0
 	userIndex              = 1
 	miniServerAddressIndex = 1
 	filesStartIndex        = 2
-
-	commandList = "list-files;" +
-		"download user \"path to file on user\" \"path to save\";" +
-		"register user \"file1\" \"file2\" \"file3\" …. \"fileN\";" +
-		"unregister user \"file1\" \"file2\" \"file3\" …. \"fileN\";"
 )
 
-// Client is a struct containing the mini server address and username of a client
-type Client struct {
-	// messagingConnection net.Conn
-	miniServerAddress string
-	username          string
-}
-
-func createEmptyClient() *Client {
-	return &Client{
-		miniServerAddress: "",
-		username:          "",
-	}
-}
-
-// TorrentServer is a struct containing server port, map[username]*address and mutex for it, map[address]*{Client struct} and mutex for it, map[username]map[file] and mutex for it
+// TorrentServer is a struct that contains:
+//     - port                - the port on which the server listens
+//     - usedUsernames       - a map whose keys are usernames(strings) that are already being used and values are the addresses of the clients that ue them(*strings)
+//     - usedUsernamesMutex  - a Mutex that is used for working with "usedUsernames"
+//     - clients             - a map whose keys are user addresses(string) and values are
+//     - clientsMutex        -
+//     - files               -
+//     - filesMutex          -
 type TorrentServer struct {
 	port               string
 	usedUsernames      map[string]*string
@@ -194,7 +180,7 @@ func (t *TorrentServer) registerClient(address string) {
 	t.clientsMutex.Lock()
 	defer t.clientsMutex.Unlock()
 
-	t.clients[address] = createEmptyClient()
+	t.clients[address] = CreateEmptyClient()
 }
 
 func (t *TorrentServer) getUsernameFor(clientAddress string) (string, error) {
@@ -206,7 +192,6 @@ func (t *TorrentServer) getUsernameFor(clientAddress string) (string, error) {
 	}
 
 	return "", fmt.Errorf("There is no such username")
-	// return t.clients[clientAddress].username
 }
 
 func (t *TorrentServer) deleteFilesFor(username string) {
@@ -274,7 +259,12 @@ loop:
 	}
 }
 
-func createNewServer(port string) *TorrentServer {
+// CreateNewServer is a factory method that:
+//    - accepts
+//         - port - a string representation of the port on which the server will listen
+//    - creates and returns
+//         - a pointer to TorrentServer struct
+func CreateNewServer(port string) *TorrentServer {
 	return &TorrentServer{
 		port:          port,
 		usedUsernames: make(map[string]*string),
@@ -283,10 +273,13 @@ func createNewServer(port string) *TorrentServer {
 	}
 }
 
-func (t *TorrentServer) start() error {
+// Start is a function that:
+//    1. Creates a listener using the port from TorrentSerevr
+//    2. Accepts and handles connections
+func (t *TorrentServer) Start() error {
 	listener, err := net.Listen(protocol, ":"+t.port)
 	if err != nil {
-		return fmt.Errorf("Error starting server on port %s. %w", port, err)
+		return fmt.Errorf("Error starting server on port %s. %w", t.port, err)
 	}
 
 	defer listener.Close()
@@ -298,13 +291,5 @@ func (t *TorrentServer) start() error {
 		} else {
 			go t.handleConnection(conn)
 		}
-	}
-}
-
-func main() {
-	ts := createNewServer(port)
-
-	if err := ts.start(); err != nil {
-		log.Fatalln(err)
 	}
 }
